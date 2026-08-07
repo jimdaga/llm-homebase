@@ -56,7 +56,6 @@ model_list:
   - model_name: claude-auto
     litellm_params:
       model: auto_router/complexity_router
-      drop_params: true
       complexity_router_default_model: claude-sonnet
       complexity_router_config:
         tiers:
@@ -100,6 +99,7 @@ router_settings:
   context_window_fallbacks:
     - claude-opus:   ["claude-sonnet"]
     - claude-sonnet: ["claude-haiku"]
+    - claude-haiku:  ["granite-free"]
     - claude-auto:   ["claude-sonnet", "claude-haiku"]
 
 litellm_settings:

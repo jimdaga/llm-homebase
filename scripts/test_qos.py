@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-test_qos.py — Demonstrate QoS budget-aware model downgrading.
+test_qos.py — Demonstrate auto-routing and QoS budget-aware model downgrading.
 
-Sends a loop of chat requests to claude-sonnet via the local LiteLLM proxy
-and prints the actual model returned in each response. When the daily budget
-cap is hit, LiteLLM silently routes to claude-haiku — this script makes
-that transition visible.
+Sends a loop of chat requests to claude-auto via the local LiteLLM proxy
+and prints the actual model each request was routed to. The auto-router
+classifies each request by complexity and routes to the appropriate tier.
+When the weekly budget cap is hit, LiteLLM silently falls back to cheaper
+models rather than returning errors.
 
 Usage:
     # First, generate a key (optional — master key works too):
@@ -51,10 +52,11 @@ client = OpenAI(
     base_url=f"{PROXY_URL}/v1",
 )
 
-print(f"LiteLLM QoS Downgrade Test")
+print(f"LiteLLM Auto-Router + QoS Downgrade Test")
 print(f"Proxy:      {PROXY_URL}")
-print(f"Requesting: claude-sonnet ({ITERATIONS} iterations)")
-print(f"Watch for the model name to change — that is the downgrade moment.")
+print(f"Requesting: claude-auto ({ITERATIONS} iterations)")
+print(f"The auto-router classifies each request and picks a tier.")
+print(f"If the budget is exhausted, watch for the model to change.")
 print()
 print(f"{'#':<5} {'Requested':<20} {'Actual model returned':<40} {'Tokens used'}")
 print("-" * 80)
@@ -64,7 +66,7 @@ previous_model = None
 for i in range(1, ITERATIONS + 1):
     try:
         response = client.chat.completions.create(
-            model="claude-sonnet",
+            model="claude-auto",
             messages=[
                 {
                     "role": "user",
@@ -85,11 +87,11 @@ for i in range(1, ITERATIONS + 1):
         if previous_model and actual_model != previous_model:
             marker = "  <-- DOWNGRADE"
 
-        print(f"{i:<5} {'claude-sonnet':<20} {actual_model:<40} {total_tokens}{marker}")
+        print(f"{i:<5} {'claude-auto':<20} {actual_model:<40} {total_tokens}{marker}")
         previous_model = actual_model
 
     except Exception as e:
-        print(f"{i:<5} {'claude-sonnet':<20} ERROR: {e}")
+        print(f"{i:<5} {'claude-auto':<20} ERROR: {e}")
 
 print()
 print("Test complete.")

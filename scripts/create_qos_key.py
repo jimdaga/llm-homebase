@@ -72,7 +72,7 @@ try:
     response.raise_for_status()
 except requests.exceptions.ConnectionError:
     print(f"ERROR: Could not connect to LiteLLM proxy at {PROXY_URL}", file=sys.stderr)
-    print("  Make sure the stack is running: docker compose up -d", file=sys.stderr)
+    print("  Make sure the stack is running: podman-compose up -d", file=sys.stderr)
     sys.exit(1)
 except requests.exceptions.Timeout:
     print("ERROR: Request timed out after 10s — is the proxy healthy?", file=sys.stderr)
