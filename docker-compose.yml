@@ -1,0 +1,34 @@
+# docker-compose.yml — Local LiteLLM proxy stack
+# Usage: docker compose up -d
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      # LiteLLM proxy config
+      - ./config.yaml:/app/config.yaml:ro
+      # SQLite database persistence — survives container restarts
+      - ./data:/app/data
+      # Google Application Default Credentials (read-only)
+      # Run once on host: gcloud auth application-default login
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
+    environment:
+      # Vertex AI auth via ADC
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      # Forwarded from .env
+      VERTEX_PROJECT: ${VERTEX_PROJECT}
+      VERTEX_LOCATION: ${VERTEX_LOCATION}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      # Models.corp — leave unset until credentials available
+      MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-placeholder}
+      MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-http://localhost}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
