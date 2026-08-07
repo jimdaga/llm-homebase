@@ -22,7 +22,7 @@ allocation so you get a safety margin before hard limits.
 
 ## Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose plugin)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Podman + podman-compose)
 - [gcloud CLI](https://cloud.google.com/sdk/docs/install) authenticated with ADC
 - A GCP project with Vertex AI API enabled
 - Python 3.9+ (for the helper scripts)
@@ -48,8 +48,14 @@ Edit `.env` and fill in:
 
 ```bash
 VERTEX_PROJECT=your-gcp-project-id   # GCP project with Vertex AI enabled
-VERTEX_LOCATION=us-central1           # Vertex region
-LITELLM_MASTER_KEY=sk-...             # Generate: python3 -c "import secrets; print('sk-' + secrets.token_hex(16))"
+VERTEX_LOCATION=global                # Vertex region — "global" works for most models
+LITELLM_MASTER_KEY=sk-your-master-key-here  # Replace with output of the command below
+```
+
+Generate the master key:
+
+```bash
+python3 -c "import secrets; print('sk-' + secrets.token_hex(16))"
 ```
 
 > **Note:** All Claude models are accessed through Vertex AI — no Anthropic API
@@ -58,14 +64,14 @@ LITELLM_MASTER_KEY=sk-...             # Generate: python3 -c "import secrets; pr
 ### 3. Start the stack
 
 ```bash
-docker compose up -d
+podman-compose up -d
 ```
 
-Wait for the health check to pass (~20 seconds):
+Wait for the health check to pass (~30 seconds — Postgres starts first, then LiteLLM):
 
 ```bash
-docker compose ps          # Status should show "healthy"
-curl http://localhost:4000/health
+podman-compose ps          # Both services should show "healthy"
+curl http://localhost:4000/health -H "Authorization: Bearer ${LITELLM_MASTER_KEY}"
 ```
 
 ### 4. Create a QoS virtual key
@@ -102,6 +108,14 @@ Model:    claude-sonnet
 
 Any other OpenAI-compatible client uses the same settings.
 
+## LiteLLM UI
+
+The proxy includes a web UI for managing keys, viewing spend, and monitoring usage:
+
+- **URL:** http://localhost:4000/ui
+- **Username:** `admin`
+- **Password:** your `LITELLM_MASTER_KEY` value
+
 ## Testing the QoS downgrade
 
 Activate the virtualenv created in step 4 (if not already active):
@@ -119,10 +133,10 @@ QoS downgrade in action.
 ## Stopping the stack
 
 ```bash
-docker compose down
+podman-compose down
 ```
 
-Budget state persists in `data/litellm.db` and is restored when you restart.
+Budget state persists in `data/postgres/` and is restored when you restart.
 
 ## Adding Models.corp (Red Hat internal models)
 
@@ -134,7 +148,7 @@ Budget state persists in `data/litellm.db` and is restored when you restart.
     MODELS_CORP_BASE_URL=https://models.corp.redhat.com/v1
     ```
 
-3. Restart the stack: `docker compose restart litellm`
+3. Restart the stack: `podman-compose restart litellm`
 
 The `granite-free` model is already wired in `config.yaml` — it becomes active
 as soon as the credentials are present.
@@ -144,13 +158,17 @@ as soon as the credentials are present.
 Uncomment the `gemini-pro` block in `config.yaml` and restart:
 
 ```bash
-docker compose restart litellm
+podman-compose restart litellm
 ```
 
 ## Tuning budgets
 
 Edit `config.yaml` and adjust `max_budget` values under each model's `model_info`
-block. Restart the proxy to apply changes.
+block. Restart the proxy to apply changes:
+
+```bash
+podman-compose restart litellm
+```
 
 > **Important:** `budget_duration` resets on a rolling 24-hour clock from the
 > moment the counter starts, **not** at midnight.

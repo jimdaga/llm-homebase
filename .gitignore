@@ -1,6 +1,11 @@
 # Secrets
 .env
 
+# AI assistant planning/spec artifacts — never commit these
+docs/superpowers/
+.superpowers/
+.planning/
+
 # Database data (PostgreSQL)
 data/postgres/
 
