@@ -56,6 +56,46 @@ model_list:
       api_base: os.environ/MODELS_CORP_BASE_URL
 
   # ──────────────────────────────────────────────
+  # AUTO-ROUTER — Complexity-based routing (BETA, requires LiteLLM v1.94.x+)
+  # Classifies each request with a heuristic scorer (zero latency, no API calls)
+  # and routes to the cheapest model adequate for the complexity:
+  #
+  #   SIMPLE    → claude-haiku   (greetings, "what is X", short prompts)
+  #   MEDIUM    → claude-sonnet  (general coding, explanations)
+  #   COMPLEX   → claude-sonnet  (no mid-tier; sonnet handles complex well)
+  #   REASONING → claude-opus    (architecture, multi-step, hard debugging)
+  #
+  # Use "claude-auto" as the model name in OpenCode — the name must contain
+  # "claude" for Claude clients to accept it.
+  # ──────────────────────────────────────────────
+  - model_name: claude-auto
+    litellm_params:
+      model: auto_router/complexity_router
+      drop_params: true
+      complexity_router_default_model: claude-sonnet
+      complexity_router_config:
+        tiers:
+          SIMPLE:    claude-haiku
+          MEDIUM:    claude-sonnet
+          COMPLEX:   claude-sonnet
+          REASONING: claude-opus
+        # Escalate to REASONING on common engineering keywords for this workload
+        custom_technical_keywords:
+          - kubernetes
+          - k8s
+          - terraform
+          - openshift
+          - hypershift
+          - gke
+          - vertex
+          - postgresql
+          - redis
+          - kafka
+          - architecture
+          - distributed
+          - concurrency
+
+  # ──────────────────────────────────────────────
   # PLACEHOLDER — Gemini via Vertex AI
   # Uncomment and set model variant when ready
   # ──────────────────────────────────────────────
