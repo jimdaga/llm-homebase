@@ -66,9 +66,8 @@ router_settings:
   retry_after: 5
 
 general_settings:
-  # SQLite for persistent spend and key tracking
-  # Path must match the volume mount in docker-compose.yml
-  database_url: "sqlite:////app/data/litellm.db"
+  # Database URL is set via DATABASE_URL env var in docker-compose.yml
+  # (PostgreSQL required — LiteLLM dropped SQLite support in recent versions)
 
   # Master key secures the /key/generate and /spend admin endpoints
   master_key: os.environ/LITELLM_MASTER_KEY

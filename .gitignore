@@ -1,8 +1,8 @@
 # Secrets
 .env
 
-# SQLite database
-data/*.db
+# Database data (PostgreSQL)
+data/postgres/
 
 # Python
 __pycache__/

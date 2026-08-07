@@ -1,7 +1,26 @@
 # docker-compose.yml — Local LiteLLM proxy stack
-# Usage: docker compose up -d
+# Usage: podman-compose up -d   (or: docker compose up -d)
+#
+# NOTE: LiteLLM requires PostgreSQL for virtual keys and spend tracking.
+# SQLite is not supported in recent LiteLLM versions.
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+      POSTGRES_DB: litellm
+    volumes:
+      # Persist the database across container restarts
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     ports:
@@ -9,8 +28,6 @@ services:
     volumes:
       # LiteLLM proxy config
       - ./config.yaml:/app/config.yaml:ro
-      # SQLite database persistence — survives container restarts
-      - ./data:/app/data
       # Google Application Default Credentials (read-only)
       # Run once on host: gcloud auth application-default login
       - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
@@ -24,11 +41,16 @@ services:
       # Models.corp — leave unset until credentials available
       MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-placeholder}
       MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-http://localhost}
+      # PostgreSQL connection string (matches postgres service above)
+      DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
     command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
     restart: unless-stopped
