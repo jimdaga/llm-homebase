@@ -50,13 +50,13 @@ All cloud-hosted models route through **Vertex AI**. Models.corp (Red Hat intern
 
 | Tier | LiteLLM alias | Vertex model ID | Daily budget cap | Fallback at 75% |
 |------|--------------|-----------------|-----------------|-----------------|
-| Premium | `claude-sonnet` | `claude-sonnet-4-5` | $10.00/day | → `claude-haiku` |
+| Premium | `claude-sonnet` | `claude-sonnet-4-5` | $17.00/day | → `claude-haiku` |
 | Standard | `claude-haiku` | `claude-haiku-4-5` | $5.00/day | → `granite-free` |
 | Free | `granite-free` | Models.corp `ibm-granite/granite-3.3-8b-instruct` | N/A | — (placeholder — requires Models.corp key + VPN, non-functional until configured) |
 
-**Budget math:** $500/month ÷ 30 days = ~$16.67/day total. $10 + $5 = $15/day allocated, leaving ~$1.67/day headroom.
+**Budget math:** $500/month ÷ ~22 workdays (Mon–Fri only) = ~$22.73/day total. 75% trigger means `max_budget` is set to 75% of the real cap per tier: Sonnet at $17/day, Haiku at $5/day = $22/day allocated, leaving ~$0.73/day headroom. Weekends are excluded — the daily budget resets each workday only.
 
-**Fallback trigger:** LiteLLM `budget_fallbacks` in `router_settings`. The 75% threshold is implemented by setting each tier's `max_budget` to 75% of the real daily dollar cap (e.g., `max_budget: 7.50` for a $10/day tier). When spend hits that limit, LiteLLM routes subsequent requests to the next tier transparently — no 429 errors, no client changes. There is no percentage threshold config key; the cap itself is the trigger.
+**Fallback trigger:** LiteLLM `budget_fallbacks` in `router_settings`. The 75% threshold is implemented by setting each tier's `max_budget` to 75% of the real daily dollar cap (e.g., `max_budget: 17.00` for a ~$22/day Sonnet tier). When spend hits that limit, LiteLLM routes subsequent requests to the next tier transparently — no 429 errors, no client changes. There is no percentage threshold config key; the cap itself is the trigger.
 
 Vertex/Gemini models get a commented-out placeholder block in `config.yaml`, ready to enable.
 
