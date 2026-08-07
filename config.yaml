@@ -3,8 +3,23 @@
 
 model_list:
   # ──────────────────────────────────────────────
+  # TIER 0 — Ultra: Claude Opus via Vertex AI
+  # Daily budget cap: $12.00 (75% trigger on premium allocation)
+  # Fallback: → claude-sonnet when budget exhausted
+  # ──────────────────────────────────────────────
+  - model_name: claude-opus
+    litellm_params:
+      model: vertex_ai/claude-opus-4-6
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+    model_info:
+      max_budget: 12.00
+      budget_duration: 1d
+
+  # ──────────────────────────────────────────────
   # TIER 1 — Premium: Claude Sonnet via Vertex AI
-  # Daily budget cap: $17.00 (75% of ~$22.73/day workday allocation)
+  # Daily budget cap: $8.00 (75% trigger on standard allocation)
+  # Fallback: → claude-haiku when budget exhausted
   # ──────────────────────────────────────────────
   - model_name: claude-sonnet
     litellm_params:
@@ -12,13 +27,13 @@ model_list:
       vertex_project: os.environ/VERTEX_PROJECT
       vertex_location: os.environ/VERTEX_LOCATION
     model_info:
-      max_budget: 17.00
+      max_budget: 8.00
       budget_duration: 1d
 
   # ──────────────────────────────────────────────
   # TIER 2 — Standard: Claude Haiku via Vertex AI
-  # Daily budget cap: $5.00 (75% of remaining workday allocation)
-  # Fallback destination when Sonnet budget is exhausted
+  # Daily budget cap: $2.00 (safety net tier)
+  # Fallback: → granite-free when budget exhausted
   # ──────────────────────────────────────────────
   - model_name: claude-haiku
     litellm_params:
@@ -26,7 +41,7 @@ model_list:
       vertex_project: os.environ/VERTEX_PROJECT
       vertex_location: os.environ/VERTEX_LOCATION
     model_info:
-      max_budget: 5.00
+      max_budget: 2.00
       budget_duration: 1d
 
   # ──────────────────────────────────────────────
@@ -52,10 +67,12 @@ model_list:
 
 router_settings:
   # QoS budget fallback chain:
-  # When claude-sonnet hits its max_budget, route to claude-haiku.
-  # When claude-haiku hits its max_budget, route to granite-free.
-  # Requests complete transparently — no 429 errors returned to client.
+  # claude-opus → claude-sonnet → claude-haiku → granite-free
+  # When a tier hits its max_budget, subsequent requests silently route
+  # to the next tier — no 429 errors returned to the client.
   budget_fallbacks:
+    - claude-opus:
+        fallback: claude-sonnet
     - claude-sonnet:
         fallback: claude-haiku
     - claude-haiku:
