@@ -98,15 +98,55 @@ export LITELLM_VIRTUAL_KEY=sk-...
 
 ### 5. Point your client at the proxy
 
-**OpenCode** (primary client): add to your OpenCode settings:
+**OpenCode** (primary client): add the `llm-homebase` provider to your
+`~/.config/opencode/opencode.jsonc`:
 
-```
-Base URL: http://localhost:4000/v1
-API Key:  <your LITELLM_VIRTUAL_KEY>
-Model:    claude-sonnet
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["llm-homebase"],
+  "model": "llm-homebase/claude-auto",
+  "small_model": "llm-homebase/claude-haiku",
+  "provider": {
+    "llm-homebase": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llm-homebase (local proxy)",
+      "options": {
+        "baseURL": "http://localhost:4000/v1",
+        // Store your virtual key in a file — never hardcode it
+        "apiKey": "{file:~/.config/opencode/.litellm-key}"
+      },
+      "models": {
+        // claude-auto: complexity-based auto-router (recommended default)
+        //   SIMPLE    → claude-haiku  (greetings, short prompts)
+        //   MEDIUM    → claude-sonnet (general coding)
+        //   COMPLEX   → claude-sonnet
+        //   REASONING → claude-opus   (architecture, hard debugging)
+        "claude-auto":   { "name": "Auto (proxy)" },
+        "claude-opus":   { "name": "Opus (proxy)" },
+        "claude-sonnet": { "name": "Sonnet (proxy)" },
+        "claude-haiku":  { "name": "Haiku (proxy)" }
+      }
+    }
+  }
+}
 ```
 
-Any other OpenAI-compatible client uses the same settings.
+Save your virtual key to the file OpenCode reads:
+
+```bash
+printf '%s' 'sk-your-virtual-key' > ~/.config/opencode/.litellm-key
+```
+
+To revert to direct Vertex AI access, restore your backup:
+
+```bash
+cp ~/.config/opencode/opencode.jsonc.backup-direct-vertex \
+   ~/.config/opencode/opencode.jsonc
+```
+
+Any other OpenAI-compatible client: set base URL to `http://localhost:4000/v1`
+and use your virtual key as the API key.
 
 ## LiteLLM UI
 

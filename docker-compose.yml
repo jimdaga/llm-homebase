@@ -22,7 +22,11 @@ services:
     restart: unless-stopped
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Pinned to the digest of main-latest as of 2026-08-07 (LiteLLM 1.97.0)
+    # To upgrade: pull main-latest, verify it works, then update this digest.
+    #   podman pull ghcr.io/berriai/litellm:main-latest
+    #   podman inspect ghcr.io/berriai/litellm:main-latest --format '{{.Digest}}'
+    image: ghcr.io/berriai/litellm@sha256:e0ac5d76ead293c1505587985c8d4360647118cf30d8005963a8f1225ee4d631
     ports:
       - "4000:4000"
     volumes:
