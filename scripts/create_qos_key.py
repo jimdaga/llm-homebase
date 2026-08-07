@@ -2,18 +2,19 @@
 """
 create_qos_key.py — Generate a LiteLLM virtual key with QoS budget limits.
 
-The key is configured with:
-  - A daily budget on claude-sonnet ($17.00 — 75% of workday allocation)
-  - Automatic fallback to claude-haiku when budget is exhausted
-  - A smaller daily budget on claude-haiku ($5.00)
+Budget is enforced at the key level (the supported LiteLLM path):
+  - $100.00/week overall cap, resets every 7 days
+  - Budget fallback chain: claude-auto → claude-sonnet → claude-haiku
+    (when the key hits its daily cap, subsequent requests fall back
+     to cheaper models rather than being rejected)
 
 Usage:
     export LITELLM_MASTER_KEY=sk-your-master-key
     python3 scripts/create_qos_key.py
 
 Output:
-    Prints the generated virtual key to stdout. Save it to .env or
-    pass it directly to test_qos.py.
+    Prints the generated virtual key to stdout. Save it to
+    ~/.config/opencode/.litellm-key or pass directly to test_qos.py.
 """
 
 import os
@@ -36,28 +37,24 @@ headers = {
 
 payload = {
     # Human-readable label for this key in the LiteLLM UI/logs
-    "key_alias": "local-qos-key",
+    "key_alias": "opencode-personal",
 
     # Models this key is allowed to call
-    "models": ["claude-sonnet", "claude-haiku", "granite-free"],
+    "models": ["claude-auto", "claude-opus", "claude-sonnet", "claude-haiku", "granite-free"],
 
-    # Per-model daily budget caps (75% of workday allocation)
-    # When claude-sonnet hits $17, the router falls back to claude-haiku.
-    # When claude-haiku hits $5, the router falls back to granite-free.
-    "model_max_budget": {
-        "claude-sonnet": {
-            "max_budget": 17.00,
-            "budget_duration": "1d",
-        },
-        "claude-haiku": {
-            "max_budget": 5.00,
-            "budget_duration": "1d",
-        },
+    # Weekly cap — $100/week, resets every 7 days
+    "max_budget": 100.00,
+    "budget_duration": "1w",
+
+    # Budget fallback chain (key-level, the supported LiteLLM path):
+    # When this key hits its weekly cap, route to cheaper models
+    # rather than returning errors.
+    "budget_fallbacks": {
+        "claude-auto":   ["claude-sonnet", "claude-haiku"],
+        "claude-opus":   ["claude-sonnet", "claude-haiku"],
+        "claude-sonnet": ["claude-haiku"],
+        "claude-haiku":  ["granite-free"],
     },
-
-    # Overall daily cap as a safety net
-    "max_budget": 22.00,
-    "budget_duration": "1d",
 
     # Key never expires — this is a personal local key
     "duration": None,
@@ -105,9 +102,9 @@ print(file=sys.stderr)
 print(f"  Key:   {key}", file=sys.stderr)
 print(f"  Alias: {data.get('key_alias', 'local-qos-key')}", file=sys.stderr)
 print(file=sys.stderr)
-print("Add to your environment:", file=sys.stderr)
-print(f"  export LITELLM_VIRTUAL_KEY={key}", file=sys.stderr)
+print("Install for OpenCode:", file=sys.stderr)
+print(f"  echo -n '{key}' > ~/.config/opencode/.litellm-key", file=sys.stderr)
 print(file=sys.stderr)
-print("Or pass directly to test_qos.py:", file=sys.stderr)
+print("Or test directly:", file=sys.stderr)
 print(f"  LITELLM_VIRTUAL_KEY={key} python3 scripts/test_qos.py", file=sys.stderr)
 print(key)
