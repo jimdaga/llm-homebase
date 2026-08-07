@@ -1,0 +1,77 @@
+# config.yaml — LiteLLM Proxy configuration
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  # ──────────────────────────────────────────────
+  # TIER 1 — Premium: Claude Sonnet via Vertex AI
+  # Daily budget cap: $17.00 (75% of ~$22.73/day workday allocation)
+  # ──────────────────────────────────────────────
+  - model_name: claude-sonnet
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+    model_info:
+      max_budget: 17.00
+      budget_duration: 1d
+
+  # ──────────────────────────────────────────────
+  # TIER 2 — Standard: Claude Haiku via Vertex AI
+  # Daily budget cap: $5.00 (75% of remaining workday allocation)
+  # Fallback destination when Sonnet budget is exhausted
+  # ──────────────────────────────────────────────
+  - model_name: claude-haiku
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+    model_info:
+      max_budget: 5.00
+      budget_duration: 1d
+
+  # ──────────────────────────────────────────────
+  # TIER 3 — Free: IBM Granite via Models.corp (Red Hat internal)
+  # PLACEHOLDER — non-functional until MODELS_CORP_API_KEY and
+  # MODELS_CORP_BASE_URL are configured in .env
+  # ──────────────────────────────────────────────
+  - model_name: granite-free
+    litellm_params:
+      model: openai/ibm-granite/granite-3.3-8b-instruct
+      api_key: os.environ/MODELS_CORP_API_KEY
+      api_base: os.environ/MODELS_CORP_BASE_URL
+
+  # ──────────────────────────────────────────────
+  # PLACEHOLDER — Gemini via Vertex AI
+  # Uncomment and set model variant when ready
+  # ──────────────────────────────────────────────
+  # - model_name: gemini-pro
+  #   litellm_params:
+  #     model: vertex_ai/gemini-2.0-flash-001
+  #     vertex_project: os.environ/VERTEX_PROJECT
+  #     vertex_location: os.environ/VERTEX_LOCATION
+
+router_settings:
+  # QoS budget fallback chain:
+  # When claude-sonnet hits its max_budget, route to claude-haiku.
+  # When claude-haiku hits its max_budget, route to granite-free.
+  # Requests complete transparently — no 429 errors returned to client.
+  budget_fallbacks:
+    - claude-sonnet:
+        fallback: claude-haiku
+    - claude-haiku:
+        fallback: granite-free
+
+  # Retry on provider errors (not budget fallbacks — those are separate)
+  num_retries: 2
+  retry_after: 5
+
+general_settings:
+  # SQLite for persistent spend and key tracking
+  # Path must match the volume mount in docker-compose.yml
+  database_url: "sqlite:////app/data/litellm.db"
+
+  # Master key secures the /key/generate and /spend admin endpoints
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Store spend data so budget tracking survives restarts
+  store_model_in_db: true
