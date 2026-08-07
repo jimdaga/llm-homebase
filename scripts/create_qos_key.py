@@ -63,7 +63,7 @@ payload = {
     "duration": None,
 }
 
-print(f"Creating QoS virtual key on {PROXY_URL} ...")
+print(f"Creating QoS virtual key on {PROXY_URL} ...", file=sys.stderr)
 
 try:
     response = requests.post(
@@ -77,11 +77,21 @@ except requests.exceptions.ConnectionError:
     print(f"ERROR: Could not connect to LiteLLM proxy at {PROXY_URL}", file=sys.stderr)
     print("  Make sure the stack is running: docker compose up -d", file=sys.stderr)
     sys.exit(1)
+except requests.exceptions.Timeout:
+    print("ERROR: Request timed out after 10s — is the proxy healthy?", file=sys.stderr)
+    sys.exit(1)
 except requests.exceptions.HTTPError as e:
     print(f"ERROR: HTTP {e.response.status_code} — {e.response.text}", file=sys.stderr)
     sys.exit(1)
 
-data = response.json()
+try:
+    data = response.json()
+except ValueError:
+    print("ERROR: Proxy returned a non-JSON response.", file=sys.stderr)
+    print(f"  Status: {response.status_code}", file=sys.stderr)
+    print(f"  Body:   {response.text[:200]}", file=sys.stderr)
+    sys.exit(1)
+
 key = data.get("key")
 
 if not key:
@@ -89,14 +99,15 @@ if not key:
     print(json.dumps(data, indent=2), file=sys.stderr)
     sys.exit(1)
 
-print()
-print("Virtual key created successfully.")
-print()
-print(f"  Key:   {key}")
-print(f"  Alias: {data.get('key_alias', 'local-qos-key')}")
-print()
-print("Add to your environment:")
-print(f"  export LITELLM_VIRTUAL_KEY={key}")
-print()
-print("Or pass directly to test_qos.py:")
-print(f"  LITELLM_VIRTUAL_KEY={key} python3 scripts/test_qos.py")
+print(file=sys.stderr)
+print("Virtual key created successfully.", file=sys.stderr)
+print(file=sys.stderr)
+print(f"  Key:   {key}", file=sys.stderr)
+print(f"  Alias: {data.get('key_alias', 'local-qos-key')}", file=sys.stderr)
+print(file=sys.stderr)
+print("Add to your environment:", file=sys.stderr)
+print(f"  export LITELLM_VIRTUAL_KEY={key}", file=sys.stderr)
+print(file=sys.stderr)
+print("Or pass directly to test_qos.py:", file=sys.stderr)
+print(f"  LITELLM_VIRTUAL_KEY={key} python3 scripts/test_qos.py", file=sys.stderr)
+print(key)
