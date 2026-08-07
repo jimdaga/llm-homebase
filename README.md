@@ -148,6 +148,10 @@ podman-compose down
 
 Budget state persists in `data/postgres/` and is restored when you restart.
 
+> **Note:** Use `podman-compose down && podman-compose up -d` (not `restart`) after
+> changing `docker-compose.yml` or `config.yaml`. `restart` reuses the old container
+> spec and won't pick up compose-level changes.
+
 ## Adding Models.corp (Red Hat internal models)
 
 1. Retrieve your Models.corp API key from the internal portal
