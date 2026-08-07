@@ -70,9 +70,17 @@ curl http://localhost:4000/health
 
 ### 4. Create a QoS virtual key
 
+Set up a virtualenv and install the script dependencies (one-time):
+
 ```bash
-pip3 install requests      # one-time
-source .env
+python3 -m venv .venv && source .venv/bin/activate
+pip3 install requests openai
+```
+
+Then load your env and run the script:
+
+```bash
+set -a; source .env; set +a  # loads KEY=value pairs into env
 python3 scripts/create_qos_key.py
 ```
 
@@ -96,8 +104,10 @@ Any other OpenAI-compatible client uses the same settings.
 
 ## Testing the QoS downgrade
 
+Activate the virtualenv created in step 4 (if not already active):
+
 ```bash
-pip3 install openai        # one-time
+source .venv/bin/activate
 python3 scripts/test_qos.py
 ```
 
