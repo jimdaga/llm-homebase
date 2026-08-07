@@ -61,9 +61,12 @@ model_list:
         tiers:
           SIMPLE:    claude-haiku
           MEDIUM:    claude-sonnet
-          COMPLEX:   claude-sonnet
+          COMPLEX:   claude-sonnet  # Intentional: sonnet handles complex well;
+                                    # opus reserved for true multi-step reasoning
           REASONING: claude-opus
-        # Escalate to REASONING on common engineering keywords for this workload
+        # Escalate to REASONING tier on these keywords, even for simple questions.
+        # Trade-off: "what is kubernetes?" routes to Opus instead of Haiku.
+        # Acceptable for this workload — infrastructure questions deserve the best model.
         custom_technical_keywords:
           - kubernetes
           - k8s

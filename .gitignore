@@ -6,7 +6,7 @@ docs/superpowers/
 .superpowers/
 .planning/
 
-# Database data (PostgreSQL)
+# PostgreSQL data directory — never commit
 data/postgres/
 
 # Python

@@ -42,9 +42,11 @@ services:
       VERTEX_PROJECT: ${VERTEX_PROJECT}
       VERTEX_LOCATION: ${VERTEX_LOCATION}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      # Models.corp — leave unset until credentials available
-      MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-placeholder}
-      MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-http://localhost}
+      # Models.corp — optional. Leave unset until you have credentials.
+      # Without these, the proxy starts fine but granite-free requests fail.
+      # See README "Adding Models.corp" for setup instructions.
+      MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-}
+      MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-}
       # PostgreSQL connection string (matches postgres service above)
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
     command: ["--config", "/app/config.yaml", "--port", "4000"]

@@ -142,6 +142,9 @@ printf '%s' 'sk-your-printed-key' > ~/.config/opencode/.litellm-key
 }
 ```
 
+> **Important:** Restart OpenCode after updating `opencode.jsonc` for changes
+> to take effect.
+
 To revert to direct Vertex AI access, restore your backup:
 
 ```bash
@@ -197,6 +200,94 @@ Budget state persists in `data/postgres/` and is restored when you restart.
 > **Important:** Always use `podman-compose down && podman-compose up -d` after
 > changing `docker-compose.yml` or `config.yaml`. `podman-compose restart` reuses
 > the old container spec and won't pick up compose-level changes.
+
+## Budget fallback behavior
+
+When the weekly budget cap is reached, requests automatically fall back through
+the model chain rather than being rejected:
+
+```
+claude-auto → claude-sonnet → claude-haiku → granite-free
+```
+
+**Important:** If all models in the chain are unavailable or the budget for every
+tier is exhausted, requests return a `429` error. Check current spend in the UI:
+http://localhost:4000/ui → **Spend**.
+
+Note that `granite-free` (the final fallback) requires Models.corp credentials
+to be configured. Without them it is effectively a dead end — requests to it will
+fail. If you don't have Models.corp access, the practical fallback chain ends at
+`claude-haiku`.
+
+## Troubleshooting
+
+### Proxy won't start
+
+```bash
+podman-compose ps
+```
+
+Both `postgres` and `litellm` should show `healthy`. If not:
+
+```bash
+# Check logs
+podman-compose logs litellm
+podman-compose logs postgres
+```
+
+Common causes:
+- Missing `.env` variables — check `VERTEX_PROJECT`, `VERTEX_LOCATION`, `LITELLM_MASTER_KEY`
+- Invalid `config.yaml` syntax — validate with:
+  ```bash
+  cd /path/to/llm-homebase && .venv/bin/python3 -c "import yaml; yaml.safe_load(open('config.yaml')); print('OK')"
+  ```
+- ADC credentials missing — run `gcloud auth application-default login`
+
+### Requests fail with 401 Unauthorized
+
+Verify your ADC credentials are valid:
+
+```bash
+gcloud auth application-default print-access-token
+```
+
+Verify your `VERTEX_PROJECT` matches your actual GCP project:
+
+```bash
+gcloud config get-value project
+```
+
+Confirm you're using a virtual key (not the master key) for client requests.
+
+### Budget not enforcing
+
+Budget enforcement is **key-level** — it only works when using a virtual key
+created by `scripts/create_qos_key.py`. The master key bypasses budgets.
+
+Confirm your key is loaded correctly:
+
+```bash
+cat ~/.config/opencode/.litellm-key | head -c 10  # should start with sk-
+```
+
+Check spend in the UI: http://localhost:4000/ui → **Virtual Keys** → `opencode-personal`.
+
+### Models.corp / granite-free requests fail
+
+The `granite-free` model is a placeholder until you configure Models.corp
+credentials. If you don't have access, it's optional — comment it out in
+`config.yaml` and restart:
+
+```bash
+podman-compose down && podman-compose up -d
+```
+
+### Check if a newer LiteLLM image is available
+
+```bash
+podman pull ghcr.io/berriai/litellm:main-latest
+./scripts/check_litellm_version.sh
+```
 
 ## Tuning budgets
 

@@ -27,6 +27,10 @@ Environment variables:
 import os
 import sys
 
+# Short responses keep per-test cost minimal while still exercising the routing logic
+DEFAULT_ITERATIONS = 10
+MAX_TOKENS_PER_REQUEST = 30
+
 try:
     from openai import OpenAI
 except ImportError:
@@ -37,7 +41,7 @@ except ImportError:
 PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
 API_KEY = os.environ.get("LITELLM_VIRTUAL_KEY") or os.environ.get("LITELLM_MASTER_KEY")
 try:
-    ITERATIONS = int(os.environ.get("TEST_ITERATIONS", "10"))
+    ITERATIONS = int(os.environ.get("TEST_ITERATIONS", str(DEFAULT_ITERATIONS)))
 except ValueError:
     print("ERROR: TEST_ITERATIONS must be a positive integer.", file=sys.stderr)
     sys.exit(1)
@@ -76,7 +80,7 @@ for i in range(1, ITERATIONS + 1):
                     ),
                 }
             ],
-            max_tokens=30,
+            max_tokens=MAX_TOKENS_PER_REQUEST,
         )
 
         actual_model = response.model
