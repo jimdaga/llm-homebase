@@ -110,11 +110,21 @@ Any other OpenAI-compatible client uses the same settings.
 
 ## LiteLLM UI
 
-The proxy includes a web UI for managing keys, viewing spend, and monitoring usage:
+The proxy includes a web UI for managing virtual keys, viewing spend, and monitoring usage.
 
-- **URL:** http://localhost:4000/ui
-- **Username:** `admin`
-- **Password:** your `LITELLM_MASTER_KEY` value
+**URL:** http://localhost:4000/ui
+
+**Login credentials:**
+- Username: `admin`
+- Password: your `LITELLM_MASTER_KEY` value from `.env`
+
+**What you can do in the UI:**
+- **Virtual Keys** — view, create, and revoke keys; see per-key spend
+- **Usage** — request counts, token usage, and cost breakdown by model
+- **Models** — confirm which models are registered and healthy
+- **Spend** — daily/monthly spend tracking across all models
+
+The UI reads spend data from Postgres, so budget usage persists across proxy restarts.
 
 ## Testing the QoS downgrade
 

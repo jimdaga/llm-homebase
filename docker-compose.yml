@@ -43,7 +43,7 @@ services:
       MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-http://localhost}
       # PostgreSQL connection string (matches postgres service above)
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
     depends_on:
       postgres:
         condition: service_healthy
