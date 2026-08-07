@@ -1,28 +1,35 @@
 # llm-homebase
 
-A personal LiteLLM proxy gateway with QoS budget-aware model downgrading for local use.
+A personal LiteLLM proxy gateway with complexity-based auto-routing and QoS budget
+management for local use.
 
-Sits between your AI client (e.g. OpenCode) and Vertex AI. When you burn through a
-premium model's daily budget cap, it silently routes subsequent requests to a cheaper
-model — no errors, no client changes needed.
+Sits between your AI client (OpenCode or any OpenAI-compatible tool) and Vertex AI.
+The auto-router classifies each request by complexity and routes it to the cheapest
+adequate model. When your weekly budget is exhausted, it falls back to cheaper tiers
+rather than returning errors.
 
 ## Architecture
 
-    Your client (OpenCode / any OpenAI-compatible tool)
-            │
-            ▼ http://localhost:4000
-      LiteLLM Proxy (Docker)
-            │
-            ├─ claude-sonnet ──► Vertex AI (claude-sonnet-4-5)  $17/day cap
-            ├─ claude-haiku  ──► Vertex AI (claude-haiku-4-5)   $5/day cap
-            └─ granite-free  ──► Models.corp (placeholder)
+```
+Your client (OpenCode / any OpenAI-compatible tool)
+        │
+        ▼ http://localhost:4000
+  LiteLLM Proxy  ──►  claude-auto (auto-router)
+        │                   │
+        │         SIMPLE    ├──► claude-haiku  ──► Vertex AI (claude-haiku-4-5)
+        │         MEDIUM    ├──► claude-sonnet ──► Vertex AI (claude-sonnet-4-5)
+        │         COMPLEX   ├──► claude-sonnet
+        │         REASONING └──► claude-opus   ──► Vertex AI (claude-opus-4-6)
+        │
+        └── granite-free ──► Models.corp / Red Hat internal (placeholder)
+```
 
-Budget math: $500/month ÷ 22 workdays = ~$22.73/day. Caps are set at 75% of
-allocation so you get a safety margin before hard limits.
+**Budget:** $100/week, tracked per virtual key in Postgres. When the weekly cap is
+hit, requests fall back through the tier chain rather than being rejected.
 
 ## Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Podman + podman-compose)
+- [Podman](https://podman.io/) + [podman-compose](https://github.com/containers/podman-compose)
 - [gcloud CLI](https://cloud.google.com/sdk/docs/install) authenticated with ADC
 - A GCP project with Vertex AI API enabled
 - Python 3.9+ (for the helper scripts)
@@ -71,6 +78,7 @@ Wait for the health check to pass (~30 seconds — Postgres starts first, then L
 
 ```bash
 podman-compose ps          # Both services should show "healthy"
+set -a; source .env; set +a
 curl http://localhost:4000/health -H "Authorization: Bearer ${LITELLM_MASTER_KEY}"
 ```
 
@@ -90,10 +98,12 @@ set -a; source .env; set +a  # loads KEY=value pairs into env
 python3 scripts/create_qos_key.py
 ```
 
-Copy the printed key and export it:
+The script creates a virtual key with a **$100/week** cap and a budget fallback chain
+(`claude-auto` → `claude-sonnet` → `claude-haiku` → `granite-free`), then prints the
+install command. Run the printed `printf` command to install it for OpenCode:
 
 ```bash
-export LITELLM_VIRTUAL_KEY=sk-...
+printf '%s' 'sk-your-printed-key' > ~/.config/opencode/.litellm-key
 ```
 
 ### 5. Point your client at the proxy
@@ -132,12 +142,6 @@ export LITELLM_VIRTUAL_KEY=sk-...
 }
 ```
 
-Save your virtual key to the file OpenCode reads:
-
-```bash
-printf '%s' 'sk-your-virtual-key' > ~/.config/opencode/.litellm-key
-```
-
 To revert to direct Vertex AI access, restore your backup:
 
 ```bash
@@ -162,23 +166,25 @@ The proxy includes a web UI for managing virtual keys, viewing spend, and monito
 - **Virtual Keys** — view, create, and revoke keys; see per-key spend
 - **Usage** — request counts, token usage, and cost breakdown by model
 - **Models** — confirm which models are registered and healthy
-- **Spend** — daily/monthly spend tracking across all models
+- **Spend** — weekly spend tracking across all models
 
-The UI reads spend data from Postgres, so budget usage persists across proxy restarts.
+Budget state persists in Postgres and survives proxy restarts.
 
-## Testing the QoS downgrade
+## Testing the auto-router
 
-Activate the virtualenv created in step 4 (if not already active):
+Activate the virtualenv (if not already active):
 
 ```bash
 source .venv/bin/activate
+set -a; source .env; set +a
 python3 scripts/test_qos.py
 ```
 
-This sends 10 short requests to `claude-sonnet` and prints the actual model
-returned for each. When the daily budget is exhausted, you will see the model
-field switch from `claude-sonnet-4-5` to `claude-haiku-4-5` — that is the
-QoS downgrade in action.
+This sends 10 short requests to `claude-auto` and prints the actual model each
+request was routed to. The auto-router classifies each request by complexity —
+you'll see haiku for simple prompts, sonnet for general coding, and opus for
+architecture or multi-step reasoning. If the weekly budget is exhausted, the model
+column will show the fallback tier in use.
 
 ## Stopping the stack
 
@@ -188,9 +194,27 @@ podman-compose down
 
 Budget state persists in `data/postgres/` and is restored when you restart.
 
-> **Note:** Use `podman-compose down && podman-compose up -d` (not `restart`) after
-> changing `docker-compose.yml` or `config.yaml`. `restart` reuses the old container
-> spec and won't pick up compose-level changes.
+> **Important:** Always use `podman-compose down && podman-compose up -d` after
+> changing `docker-compose.yml` or `config.yaml`. `podman-compose restart` reuses
+> the old container spec and won't pick up compose-level changes.
+
+## Tuning budgets
+
+Budgets are managed on the virtual key, not in `config.yaml`. Use the UI at
+http://localhost:4000/ui → **Virtual Keys** → edit `opencode-personal`, or
+regenerate the key with updated values:
+
+```bash
+# Delete the existing key in the UI first, then:
+set -a; source .env; set +a
+python3 scripts/create_qos_key.py
+```
+
+The key script is the source of truth for budget values — edit it before
+regenerating if you want different limits.
+
+> **Note:** `budget_duration: 1w` resets on a rolling 7-day clock from the
+> moment the budget period started, **not** at the beginning of the calendar week.
 
 ## Adding Models.corp (Red Hat internal models)
 
@@ -202,27 +226,40 @@ Budget state persists in `data/postgres/` and is restored when you restart.
     MODELS_CORP_BASE_URL=https://models.corp.redhat.com/v1
     ```
 
-3. Restart the stack: `podman-compose restart litellm`
+3. Restart the stack:
+
+    ```bash
+    podman-compose down && podman-compose up -d
+    ```
 
 The `granite-free` model is already wired in `config.yaml` — it becomes active
 as soon as the credentials are present.
 
 ## Adding Vertex Gemini models
 
-Uncomment the `gemini-pro` block in `config.yaml` and restart:
+Uncomment the `gemini-pro` block in `config.yaml`, then restart:
 
 ```bash
-podman-compose restart litellm
+podman-compose down && podman-compose up -d
 ```
 
-## Tuning budgets
+## Upgrading LiteLLM
 
-Edit `config.yaml` and adjust `max_budget` values under each model's `model_info`
-block. Restart the proxy to apply changes:
+The image is pinned to a specific digest in `docker-compose.yml` for stability.
+To upgrade:
 
 ```bash
-podman-compose restart litellm
-```
+# Pull the latest image
+podman pull ghcr.io/berriai/litellm:main-latest
 
-> **Important:** `budget_duration` resets on a rolling 24-hour clock from the
-> moment the counter starts, **not** at midnight.
+# Get the new digest
+podman inspect ghcr.io/berriai/litellm:main-latest --format '{{.Digest}}'
+
+# Update the digest in docker-compose.yml, then:
+podman-compose down && podman-compose up -d
+
+# Verify everything still works before committing
+podman-compose ps
+curl http://localhost:4000/health -H "Authorization: Bearer ${LITELLM_MASTER_KEY}"
+git add docker-compose.yml && git commit -m "chore: upgrade LiteLLM to <version>"
+```
