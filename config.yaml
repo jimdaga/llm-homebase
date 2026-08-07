@@ -91,9 +91,38 @@ model_list:
   #     vertex_location: os.environ/VERTEX_LOCATION
 
 router_settings:
-  # Retry on provider errors
+  # Retry on provider errors (not budget fallbacks — those are key-level)
   num_retries: 2
   retry_after: 5
+
+  # If a model hits its context window limit, fall back to the next tier
+  # rather than returning an error to the client.
+  context_window_fallbacks:
+    - claude-opus:   ["claude-sonnet"]
+    - claude-sonnet: ["claude-haiku"]
+    - claude-auto:   ["claude-sonnet", "claude-haiku"]
+
+litellm_settings:
+  # Drop unsupported params silently rather than erroring — some Vertex
+  # models don't support every OpenAI field (e.g. logprobs, user).
+  drop_params: true
+
+  # Abort requests that haven't completed within 5 minutes. Prevents
+  # hung requests from blocking the proxy indefinitely.
+  request_timeout: 300
+
+  # Disk-based response cache — survives proxy restarts, zero extra
+  # containers. Identical requests (same model + messages) return the
+  # cached response at no cost.
+  #
+  # Note: LiteLLM caches on exact message match. OpenCode adds a unique
+  # session ID to each request, so most real sessions won't hit this cache.
+  # It's most useful for the test_qos.py script and any tooling that
+  # sends repeated identical prompts.
+  cache: true
+  cache_params:
+    type: local
+    ttl: 3600  # Cache responses for 1 hour (resets on proxy restart)
 
 general_settings:
   # Database URL is set via DATABASE_URL env var in docker-compose.yml
