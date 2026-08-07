@@ -1,0 +1,31 @@
+# lint.yml — Validate config files on pull requests
+name: Lint
+
+on:
+  pull_request:
+    paths:
+      - "config.yaml"
+      - "docker-compose.yml"
+      - ".github/workflows/**"
+
+jobs:
+  lint:
+    name: Validate configs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate config.yaml syntax
+        run: |
+          python3 -c "import yaml, sys; yaml.safe_load(open('config.yaml')); print('config.yaml: valid')"
+
+      - name: Validate docker-compose.yml syntax
+        run: |
+          # docker compose config validates structure without requiring .env values
+          # We supply dummy values for required vars to allow syntax validation
+          VERTEX_PROJECT=test \
+          VERTEX_LOCATION=us-central1 \
+          LITELLM_MASTER_KEY=sk-test \
+          docker compose config --quiet
+          echo "docker-compose.yml: valid"
