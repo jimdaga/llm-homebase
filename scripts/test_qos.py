@@ -9,7 +9,7 @@ that transition visible.
 
 Usage:
     # First, generate a key (optional — master key works too):
-    export LITELLM_VIRTUAL_KEY=$(python3 scripts/create_qos_key.py | grep "Key:" | awk '{print $2}')
+    export LITELLM_VIRTUAL_KEY=$(python3 scripts/create_qos_key.py)
 
     # Or use master key directly:
     export LITELLM_MASTER_KEY=sk-your-master-key
@@ -35,7 +35,11 @@ except ImportError:
 
 PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
 API_KEY = os.environ.get("LITELLM_VIRTUAL_KEY") or os.environ.get("LITELLM_MASTER_KEY")
-ITERATIONS = int(os.environ.get("TEST_ITERATIONS", "10"))
+try:
+    ITERATIONS = int(os.environ.get("TEST_ITERATIONS", "10"))
+except ValueError:
+    print("ERROR: TEST_ITERATIONS must be a positive integer.", file=sys.stderr)
+    sys.exit(1)
 
 if not API_KEY:
     print("ERROR: No API key found.", file=sys.stderr)

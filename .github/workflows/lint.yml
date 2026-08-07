@@ -29,3 +29,8 @@ jobs:
           LITELLM_MASTER_KEY=sk-test \
           docker compose config --quiet
           echo "docker-compose.yml: valid"
+
+      - name: Validate Python scripts
+        run: |
+          python3 -m py_compile scripts/create_qos_key.py && echo "create_qos_key.py: valid"
+          python3 -m py_compile scripts/test_qos.py && echo "test_qos.py: valid"
