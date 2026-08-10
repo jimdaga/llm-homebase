@@ -282,6 +282,32 @@ credentials. If you don't have access, it's optional — comment it out in
 podman-compose down && podman-compose up -d
 ```
 
+If you *do* have credentials configured and requests still fail, check the
+error against these two known causes:
+
+**`SSLCertVerificationError: self-signed certificate in certificate chain`**
+— `internal-root-ca.pem` is missing from the repo root, or `ssl_verify` in
+`config.yaml` points at the wrong path. See "Adding Models.corp" below.
+
+**`404 Not Found` / `No Mapping Rule matched`** — `MODELS_CORP_BASE_URL` is
+missing its `/v1` suffix. Verify what's actually reaching the container:
+
+```bash
+podman exec llm-homebase_litellm_1 printenv MODELS_CORP_BASE_URL
+```
+
+That should match `.env` exactly. (`docker-compose.yml` loads these vars via
+`env_file`, not `${VAR}` interpolation, specifically so a stray exported
+shell variable from an old `source .env` in your terminal can't silently
+override a correct `.env` — if the two ever *do* disagree, look for a typo
+in `.env` itself rather than your shell.)
+
+> **Note:** `claude-auto` never appears in `/health` output, healthy or
+> unhealthy — it's a meta-router (`auto_router/complexity_router`) with no
+> real endpoint of its own to probe. It's intentionally excluded via
+> `model_info.disable_background_health_check`; its underlying tier models
+> (`claude-opus`/`claude-sonnet`/`claude-haiku`) are health-checked normally.
+
 ### Check if a newer LiteLLM image is available
 
 ```bash
@@ -310,21 +336,33 @@ regenerating if you want different limits.
 ## Adding Models.corp (Red Hat internal models)
 
 1. Retrieve your Models.corp API key from the internal portal
-2. Add to `.env`:
+
+2. Add to `.env` (see `.env.example` for the full template):
 
     ```bash
     MODELS_CORP_API_KEY=your-key
-    MODELS_CORP_BASE_URL=https://models.corp.redhat.com/v1
+    MODELS_CORP_BASE_URL=https://<models-corp-hostname>/v1   # must include /v1
+    MODELS_CORP_PROVIDER=openai
+    MODELS_CORP_MODEL_ID=ibm-granite/granite-3.3-8b-instruct
+    MODELS_CORP_PROVIDER_MODEL_ID=${MODELS_CORP_PROVIDER}/${MODELS_CORP_MODEL_ID}
     ```
 
-3. Restart the stack:
+3. Place the Red Hat internal root CA at `internal-root-ca.pem` in the repo
+   root. Models.corp endpoints present a cert chain signed by Red Hat's
+   internal PKI, which isn't in any public trust store — without this file,
+   requests fail TLS verification. It's already wired into `docker-compose.yml`
+   (mounted read-only) and `config.yaml` (`ssl_verify` on `granite-free`), so
+   no further config is needed once the file is in place. The cert itself is
+   public (no private key material) and safe to commit.
+
+4. Restart the stack:
 
     ```bash
     podman-compose down && podman-compose up -d
     ```
 
 The `granite-free` model is already wired in `config.yaml` — it becomes active
-as soon as the credentials are present.
+as soon as the credentials and cert are present.
 
 ## Adding Vertex Gemini models
 
