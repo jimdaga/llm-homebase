@@ -13,7 +13,7 @@ services:
       POSTGRES_DB: litellm
     volumes:
       # Persist the database across container restarts
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm"]
       interval: 5s
@@ -31,24 +31,33 @@ services:
       - "4000:4000"
     volumes:
       # LiteLLM proxy config
-      - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro,Z
       # Google Application Default Credentials (read-only)
       # Run once on host: gcloud auth application-default login
-      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro,Z
+      # root CA for models corp
+      - ./internal-root-ca.pem:/app/internal-root-ca.pem:ro,Z
+    # Load VERTEX_*, LITELLM_MASTER_KEY, MODELS_CORP_* straight from the .env
+    # file into the container. Deliberately NOT using `environment: KEY:
+    # ${KEY}` interpolation for these — that reads from the *host shell's*
+    # exported env first and only falls back to .env, so a stale exported var
+    # in your terminal (e.g. from an old `source .env`) silently overrides a
+    # correct, freshly-edited .env on every `up`/restart. env_file reads the
+    # file directly, independent of whatever's exported in your shell.
+    env_file:
+      - .env
     environment:
       # Vertex AI auth via ADC
       GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
-      # Forwarded from .env
-      VERTEX_PROJECT: ${VERTEX_PROJECT}
-      VERTEX_LOCATION: ${VERTEX_LOCATION}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      # Models.corp — optional. Leave unset until you have credentials.
-      # Without these, the proxy starts fine but granite-free requests fail.
-      # See README "Adding Models.corp" for setup instructions.
-      MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-}
-      MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-}
       # PostgreSQL connection string (matches postgres service above)
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
+      # Route the "openai/" provider through litellm's newer unified HTTP
+      # handler instead of the OpenAI-SDK-based one. Needed so the per-model
+      # `ssl_verify` in litellm_params (see granite-free in config.yaml)
+      # actually gets applied to the TLS handshake — the default handler
+      # silently ignores it and only honors litellm.ssl_verify globally.
+      # Does not affect vertex_ai/claude models (different code path).
+      EXPERIMENTAL_OPENAI_BASE_LLM_HTTP_HANDLER: "true"
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     depends_on:
       postgres:

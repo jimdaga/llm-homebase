@@ -31,14 +31,15 @@ model_list:
 
   # ──────────────────────────────────────────────
   # TIER 3 — Free: IBM Granite via Models.corp (Red Hat internal)
-  # PLACEHOLDER — non-functional until MODELS_CORP_API_KEY and
-  # MODELS_CORP_BASE_URL are configured in .env
+  # PLACEHOLDER — non-functional until MODELS_CORP_* vars are configured in
+  # .env and internal-root-ca.pem is present. See README "Adding Models.corp".
   # ──────────────────────────────────────────────
   - model_name: granite-free
     litellm_params:
-      model: openai/ibm-granite/granite-3.3-8b-instruct
-      api_key: os.environ/MODELS_CORP_API_KEY
+      model: os.environ/MODELS_CORP_PROVIDER_MODEL_ID
       api_base: os.environ/MODELS_CORP_BASE_URL
+      api_key: os.environ/MODELS_CORP_API_KEY
+      ssl_verify: /app/internal-root-ca.pem
 
   # ──────────────────────────────────────────────
   # AUTO-ROUTER — Complexity-based routing (BETA, requires LiteLLM v1.94.x+)
@@ -81,6 +82,14 @@ model_list:
           - architecture
           - distributed
           - concurrency
+    model_info:
+      # auto_router/complexity_router is a proxy-side meta-router with no real
+      # completion handler — litellm.ahealth_check() 400s on it ("Unmapped LLM
+      # provider"). litellm's skip logic for auto_router health checks only
+      # covers semantic auto_router, not complexity_router. Skip it here;
+      # the real tier models (claude-opus/sonnet/haiku) are health-checked
+      # individually anyway, so nothing is actually left unchecked.
+      disable_background_health_check: true
 
   # ──────────────────────────────────────────────
   # PLACEHOLDER — Gemini via Vertex AI
@@ -130,6 +139,12 @@ litellm_settings:
 general_settings:
   # Database URL is set via DATABASE_URL env var in docker-compose.yml
   # (PostgreSQL required — LiteLLM dropped SQLite support in recent versions)
+
+  # Extend model_info.disable_background_health_check to the on-demand
+  # GET /health endpoint too (not just the scheduled background loop).
+  # Needed so claude-auto (auto_router/complexity_router) isn't probed
+  # directly — it has no real completion handler to health-check.
+  health_check_skip_disabled_background_models: true
 
   # Master key secures the /key/generate and /spend admin endpoints
   master_key: os.environ/LITELLM_MASTER_KEY
