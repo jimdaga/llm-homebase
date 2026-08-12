@@ -32,9 +32,14 @@ services:
     volumes:
       # LiteLLM proxy config
       - ./config.yaml:/app/config.yaml:ro,Z
-      # Google Application Default Credentials (read-only)
-      # Run once on host: gcloud auth application-default login
-      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro,Z
+      # Google Application Default Credentials (read-only).
+      # Mount the directory (not the file) so re-running
+      # `gcloud auth application-default login` is picked up without
+      # a container restart — gcloud atomically replaces the file,
+      # which breaks single-file bind mounts.
+      - ${HOME}/.config/gcloud:/gcp/gcloud:ro,Z
+      # Proactive token refresh callback (see scripts/vertex_proactive_refresh.py)
+      - ./scripts/vertex_proactive_refresh.py:/app/scripts/vertex_proactive_refresh.py:ro,Z
       # root CA for models corp
       - ./internal-root-ca.pem:/app/internal-root-ca.pem:ro,Z
     # Load VERTEX_*, LITELLM_MASTER_KEY, MODELS_CORP_* straight from the .env
@@ -48,7 +53,7 @@ services:
       - .env
     environment:
       # Vertex AI auth via ADC
-      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/gcloud/application_default_credentials.json
       # PostgreSQL connection string (matches postgres service above)
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
       # Route the "openai/" provider through litellm's newer unified HTTP
