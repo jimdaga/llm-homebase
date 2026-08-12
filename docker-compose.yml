@@ -50,7 +50,8 @@ services:
     # correct, freshly-edited .env on every `up`/restart. env_file reads the
     # file directly, independent of whatever's exported in your shell.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # Vertex AI auth via ADC
       GOOGLE_APPLICATION_CREDENTIALS: /gcp/gcloud/application_default_credentials.json
