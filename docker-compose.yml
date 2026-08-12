@@ -56,6 +56,11 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /gcp/gcloud/application_default_credentials.json
       # PostgreSQL connection string (matches postgres service above)
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
+      # Defaults for Models.corp — overridden by .env when set.
+      # Prevents LiteLLM crash on startup when vars are absent.
+      MODELS_CORP_PROVIDER_MODEL_ID: ${MODELS_CORP_PROVIDER_MODEL_ID:-openai/ibm-granite/granite-3.3-8b-instruct}
+      MODELS_CORP_BASE_URL: ${MODELS_CORP_BASE_URL:-}
+      MODELS_CORP_API_KEY: ${MODELS_CORP_API_KEY:-}
       # Route the "openai/" provider through litellm's newer unified HTTP
       # handler instead of the OpenAI-SDK-based one. Needed so the per-model
       # `ssl_verify` in litellm_params (see granite-free in config.yaml)
