@@ -136,6 +136,13 @@ litellm_settings:
     type: local
     ttl: 3600  # Cache responses for 1 hour (resets on proxy restart)
 
+  # Proactive Vertex AI token refresh — patches google-auth to refresh
+  # ADC tokens 5 minutes before expiry (default is at expiry). Prevents
+  # ACCESS_TOKEN_TYPE_UNSUPPORTED 401 errors that occur when the token
+  # expires during network transit to Vertex AI.
+  callbacks:
+    - scripts.vertex_proactive_refresh.proxy_handler_instance
+
 general_settings:
   # Database URL is set via DATABASE_URL env var in docker-compose.yml
   # (PostgreSQL required — LiteLLM dropped SQLite support in recent versions)

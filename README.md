@@ -43,7 +43,9 @@ gcloud auth application-default login
 ```
 
 This creates `~/.config/gcloud/application_default_credentials.json`, which is
-bind-mounted read-only into the LiteLLM container.
+bind-mounted read-only into the LiteLLM container via a directory mount.
+You can re-run this command at any time to refresh credentials without
+restarting the container.
 
 ### 2. Configure environment
 
@@ -258,6 +260,27 @@ gcloud config get-value project
 ```
 
 Confirm you're using a virtual key (not the master key) for client requests.
+
+### Requests fail with ACCESS_TOKEN_TYPE_UNSUPPORTED after ~1 hour
+
+This is a token expiry race condition. Google ADC access tokens expire after
+1 hour, and the Vertex AI sync code path in LiteLLM only refreshes tokens
+after they've already expired — a request in flight when the token expires
+gets rejected.
+
+The proxy ships with a proactive refresh callback
+(`scripts/vertex_proactive_refresh.py`) that patches google-auth to refresh
+tokens 5 minutes before actual expiry, preventing this race. Verify it's
+loaded:
+
+```bash
+podman-compose logs litellm 2>&1 | grep -i "proactive"
+podman exec llm-homebase_litellm_1 python3 /app/scripts/check_vertex_auth.py
+```
+
+If the patch isn't active, check that `litellm_settings.callbacks` in
+`config.yaml` includes `scripts.vertex_proactive_refresh.proxy_handler_instance`
+and that the volume mount exists in `docker-compose.yml`.
 
 ### Budget not enforcing
 
