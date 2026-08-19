@@ -10,6 +10,8 @@ model_list:
       model: vertex_ai/claude-opus-4-6
       vertex_project: os.environ/VERTEX_PROJECT
       vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
 
   # ──────────────────────────────────────────────
   # TIER 1 — Premium: Claude Sonnet via Vertex AI
@@ -19,6 +21,8 @@ model_list:
       model: vertex_ai/claude-sonnet-4-5
       vertex_project: os.environ/VERTEX_PROJECT
       vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
 
   # ──────────────────────────────────────────────
   # TIER 2 — Standard: Claude Haiku via Vertex AI
@@ -28,6 +32,8 @@ model_list:
       model: vertex_ai/claude-haiku-4-5
       vertex_project: os.environ/VERTEX_PROJECT
       vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
 
   # ──────────────────────────────────────────────
   # TIER 3 — Free: IBM Granite via Models.corp (Red Hat internal)
@@ -42,17 +48,16 @@ model_list:
       ssl_verify: /app/internal-root-ca.pem
 
   # ──────────────────────────────────────────────
-  # AUTO-ROUTER — Complexity-based routing (BETA, requires LiteLLM v1.94.x+)
-  # Classifies each request with a heuristic scorer (zero latency, no API calls)
-  # and routes to the cheapest model adequate for the complexity:
+  # AUTO-ROUTER — Complexity-based routing (OPTIMIZED for system design + operator development)
+  # 
+  # Workload profile: HyperShift, Kubernetes operators, distributed systems, GCP infrastructure
+  # Session affinity enabled for multi-turn coding sessions with prompt cache optimization
   #
-  #   SIMPLE    → claude-haiku   (greetings, "what is X", short prompts)
-  #   MEDIUM    → claude-sonnet  (general coding, explanations)
-  #   COMPLEX   → claude-sonnet  (no mid-tier; sonnet handles complex well)
-  #   REASONING → claude-opus    (architecture, multi-step, hard debugging)
-  #
-  # Use "claude-auto" as the model name in OpenCode — the name must contain
-  # "claude" for Claude clients to accept it.
+  # Routing strategy:
+  #   SIMPLE    → claude-haiku   (rare - basic informational queries)
+  #   MEDIUM    → claude-sonnet  (implementation, debugging, code review)
+  #   COMPLEX   → claude-sonnet  (operator development, infrastructure work)
+  #   REASONING → claude-opus    (system architecture, design decisions, ADRs)
   # ──────────────────────────────────────────────
   - model_name: claude-auto
     litellm_params:
@@ -62,26 +67,154 @@ model_list:
         tiers:
           SIMPLE:    claude-haiku
           MEDIUM:    claude-sonnet
-          COMPLEX:   claude-sonnet  # Intentional: sonnet handles complex well;
-                                    # opus reserved for true multi-step reasoning
+          COMPLEX:   claude-sonnet
           REASONING: claude-opus
-        # Escalate to REASONING tier on these keywords, even for simple questions.
-        # Trade-off: "what is kubernetes?" routes to Opus instead of Haiku.
-        # Acceptable for this workload — infrastructure questions deserve the best model.
+        
+        # Session affinity: preserve prompt cache across multi-turn sessions
+        session_affinity: true
+        session_affinity_ttl_seconds: 1800  # 30 min — allows tier adjustment if queries evolve
+        
+        # Tier boundaries: conservative tuning for architectural workload
+        tier_boundaries:
+          simple_medium:     0.15  # Default
+          medium_complex:    0.35  # Default
+          complex_reasoning: 0.70  # Raised from 0.60 - save opus for true architecture
+        
+        # Dimension weights: tuned for architectural + implementation balance
+        dimension_weights:
+          tokenCount:        0.10  # Architecture queries tend to be longer
+          codePresence:      0.15  # Code is common in both tiers
+          reasoningMarkers:  0.35  # Critical signal for architecture work
+          technicalTerms:    0.15  # Everything is technical
+          simpleIndicators:  0.02  # Simple questions rare
+          multiStepPatterns: 0.20  # Work is inherently multi-step (implementation plans, operators)
+          questionComplexity: 0.03 # Balance the increases
+        
+        # Intent-based keyword routing: differentiate explanation from design
+        # Rules are ordered from MOST SPECIFIC to LEAST SPECIFIC (first match wins)
+        keyword_tier_rules:
+          # ══════════════════════════════════════════════════════════════════
+          # TIER: REASONING (Opus) — Architecture & Design
+          # Most specific rules first to prevent broader rules from matching
+          # ══════════════════════════════════════════════════════════════════
+          
+          # Design Decision Records & RFCs
+          - keywords: ["ADR", "design decision record", "architecture decision record",
+                       "RFC", "request for comments", "design proposal",
+                       "architecture decision", "design document"]
+            tier: REASONING
+          
+          # System Architecture & Design Patterns
+          - keywords: ["system architecture", "system design", "architecture pattern",
+                       "design pattern", "architectural pattern",
+                       "evaluate tradeoffs", "evaluate trade-offs", "trade-off analysis",
+                       "design strategy", "architecture strategy"]
+            tier: REASONING
+          
+          # Distributed Systems Architecture
+          - keywords: ["distributed system architecture", "distributed system design",
+                       "multi-cluster architecture", "multi-cluster design",
+                       "multi-region architecture", "multi-region design",
+                       "fault tolerance strategy", "fault tolerance design",
+                       "consensus algorithm", "consensus strategy",
+                       "scale strategy", "scaling architecture"]
+            tier: REASONING
+          
+          # GCP Architecture & Infrastructure Design
+          - keywords: ["infrastructure architecture", "platform architecture",
+                       "Private Service Connect design", "PSC architecture",
+                       "VPC peering architecture", "VPC design",
+                       "Workload Identity Federation design", "WIF architecture",
+                       "GKE architecture design", "Cloud Workflows design"]
+            tier: REASONING
+          
+          # Distributed systems architecture (very specific patterns)
+          - keywords: ["distributed system design", "distributed system architecture",
+                       "multi-region architecture", "multi-cluster architecture"]
+            tier: REASONING
+
+          # Database & schema design (architectural scope)
+          - keywords: ["database schema design", "data model architecture",
+                       "schema architecture"]
+            tier: REASONING
+
+          # Generic architecture — only if more specific rules didn't match
+          # NOTE: This is broad and catches implementation too — use sparingly
+          - keywords: ["system design", "design system"]
+            tier: REASONING
+          
+          # ══════════════════════════════════════════════════════════════════
+          # TIER: COMPLEX (Sonnet) — Implementation & Debugging
+          # ══════════════════════════════════════════════════════════════════
+          
+          # Informational Queries
+          - keywords: ["what is", "what are", "explain", "how does", "how do",
+                       "describe", "show me", "tell me about", "give me an example"]
+            tier: COMPLEX
+          
+          # Implementation - Infrastructure as Code
+          - keywords: ["terraform module", "terraform plan", "terraform apply",
+                       "terraform destroy", "write terraform", "create terraform",
+                       "implement terraform", "refactor terraform"]
+            tier: COMPLEX
+          
+          # Implementation - GitOps & Kubernetes
+          - keywords: ["argocd application", "argocd app", "argocd sync",
+                       "helm chart", "helm template", "kustomize",
+                       "kubernetes manifest", "k8s manifest"]
+            tier: COMPLEX
+          
+          # Implementation - Operators & Controllers
+          - keywords: ["reconcile loop", "reconcile function", "controller implementation",
+                       "controller code", "operator code", "operator implementation",
+                       "implement controller", "implement operator",
+                       "write controller", "write operator",
+                       "CRD definition", "custom resource definition"]
+            tier: COMPLEX
+          
+          # Implementation - General Code
+          - keywords: ["implement", "write code", "create", "add feature",
+                       "refactor", "code review", "pull request", "PR"]
+            tier: COMPLEX
+          
+          # Debugging & Troubleshooting
+          - keywords: ["debug", "debugging", "troubleshoot", "troubleshooting",
+                       "fix bug", "fix error", "fix issue", "fix problem",
+                       "not working", "failing", "failed", "error",
+                       "issue with", "problem with", "broken"]
+            tier: COMPLEX
+
+          # Performance & Optimization (tuning, not architecture)
+          - keywords: ["optimize performance", "improve latency", "reduce latency",
+                       "throughput optimization", "capacity planning",
+                       "performance tuning", "optimize query"]
+            tier: COMPLEX
+
+          # Security & Compliance Implementation (not architecture)
+          - keywords: ["implement security", "add authentication", "setup TLS",
+                       "implement encryption", "access control implementation",
+                       "implement oauth", "implement mTLS"]
+            tier: COMPLEX
+
+          # Production Incidents & Root Cause (stay grounded in COMPLEX)
+          - keywords: ["production issue", "production outage", "debug production",
+                       "root cause analysis", "incident response", "post-mortem",
+                       "investigate outage", "system down"]
+            tier: COMPLEX
+
+          # Documentation (procedural, implementation-focused)
+          - keywords: ["write documentation", "create runbook", "document process",
+                       "write guide", "create procedure", "document workflow"]
+            tier: COMPLEX
+        
+        # Escalation keywords: always route to opus for architectural reasoning
         custom_technical_keywords:
-          - kubernetes
-          - k8s
-          - terraform
-          - openshift
-          - hypershift
-          - gke
-          - vertex
-          - postgresql
-          - redis
-          - kafka
-          - architecture
-          - distributed
-          - concurrency
+          - "distributed system architecture"
+          - "multi-cluster design"
+          - "fault tolerance strategy"
+          - "consensus algorithm"
+          - "architecture decision record"
+    
     model_info:
       # auto_router/complexity_router is a proxy-side meta-router with no real
       # completion handler — litellm.ahealth_check() 400s on it ("Unmapped LLM
@@ -90,6 +223,43 @@ model_list:
       # the real tier models (claude-opus/sonnet/haiku) are health-checked
       # individually anyway, so nothing is actually left unchecked.
       disable_background_health_check: true
+
+  # ──────────────────────────────────────────────
+  # ROUTING GROUPS — Manual Tier Selection
+  # Callable as virtual models for explicit control
+  # ──────────────────────────────────────────────
+  - model_name: architecture-tier
+    litellm_params:
+      model: vertex_ai/claude-opus-4-6
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+    model_info:
+      id: architecture-tier
+      description: "Force Opus for architecture and design work (ADRs, RFCs, system design)"
+
+  - model_name: implementation-tier
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+    model_info:
+      id: implementation-tier
+      description: "Force Sonnet for implementation and debugging (controllers, terraform, fixes)"
+
+  - model_name: quick-info
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: os.environ/VERTEX_LOCATION
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+    model_info:
+      id: quick-info
+      description: "Force Haiku for simple informational queries (what is X, explain Y)"
 
   # ──────────────────────────────────────────────
   # PLACEHOLDER — Gemini via Vertex AI
@@ -102,17 +272,31 @@ model_list:
   #     vertex_location: os.environ/VERTEX_LOCATION
 
 router_settings:
+  # Routing strategy: simple-shuffle recommended for production performance
+  routing_strategy: simple-shuffle
+  
   # Retry on provider errors (not budget fallbacks — those are key-level)
-  num_retries: 2
+  num_retries: 3
   retry_after: 5
+  
+  # Cooldown settings for handling failures
+  allowed_fails: 3
+  cooldown_time: 60
+  
+  # Enable weighted failover for same-tier retries before cross-tier fallback
+  enable_weighted_failover: true
+  max_fallbacks: 5
 
   # If a model hits its context window limit, fall back to the next tier
   # rather than returning an error to the client.
   context_window_fallbacks:
-    - claude-opus:   ["claude-sonnet"]
-    - claude-sonnet: ["claude-haiku"]
-    - claude-haiku:  ["granite-free"]
-    - claude-auto:   ["claude-sonnet", "claude-haiku"]
+    - claude-opus:            ["claude-sonnet"]
+    - claude-sonnet:          ["claude-haiku"]
+    - claude-haiku:           ["granite-free"]
+    - claude-auto:            ["claude-sonnet", "claude-haiku"]
+    - architecture-tier:      ["implementation-tier"]
+    - implementation-tier:    ["quick-info"]
+    - quick-info:             ["granite-free"]
 
 litellm_settings:
   # Drop unsupported params silently rather than erroring — some Vertex
@@ -142,6 +326,7 @@ litellm_settings:
   # expires during network transit to Vertex AI.
   callbacks:
     - scripts.vertex_proactive_refresh.proxy_handler_instance
+    - scripts.routing_logger.proxy_handler_instance  # Log routing decisions
 
 general_settings:
   # Database URL is set via DATABASE_URL env var in docker-compose.yml

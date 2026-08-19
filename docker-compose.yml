@@ -14,6 +14,8 @@ services:
     volumes:
       # Persist the database across container restarts
       - ./data/postgres:/var/lib/postgresql/data:Z
+      # Mount scripts for execution
+      - ./scripts:/scripts:ro,Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm"]
       interval: 5s
@@ -40,6 +42,8 @@ services:
       - ${HOME}/.config/gcloud:/gcp/gcloud:ro,Z
       # Proactive token refresh callback (see scripts/vertex_proactive_refresh.py)
       - ./scripts/vertex_proactive_refresh.py:/app/scripts/vertex_proactive_refresh.py:ro,Z
+      # Routing logger callback (see scripts/routing_logger.py)
+      - ./scripts/routing_logger.py:/app/scripts/routing_logger.py:ro,Z
       # root CA for models corp
       - ./internal-root-ca.pem:/app/internal-root-ca.pem:ro,Z
     # Load VERTEX_*, LITELLM_MASTER_KEY, MODELS_CORP_* straight from the .env
